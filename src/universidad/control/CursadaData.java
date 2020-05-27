@@ -8,12 +8,7 @@ package universidad.control;
 import java.sql.*;
 import java.util.ArrayList;
 import java.util.List;
-import universidad.control.AlumnoData;
-import universidad.control.Conexion;
-import universidad.control.MateriaData;
-import universidad.modelo.Alumno;
-import universidad.modelo.Cursada;
-import universidad.modelo.Materia;
+import universidad.modelo.*;
 
 /**
  *
@@ -21,11 +16,10 @@ import universidad.modelo.Materia;
  */
 public class CursadaData {
     
-    private Connection connection = null;
-    private Conexion conexion;
+    private Connection userConn;
     
     private final String SQL_INSERT = "INSERT INTO cursada(id_alumno, id_materia, nota) VALUES (?, ?, ?)"; //Query para insertar una Cursada
-       
+
     private final String SQL_DELETE = "DELETE FROM cursada WHERE id_materia = ?";
     
     private final String SQL_SELECT_ALL = "SELECT * FROM cursada";
@@ -40,172 +34,234 @@ public class CursadaData {
     
     private final String SQL_UPDATE_NOTA = "UPDATE cursada SET nota = ? WHERE idAlumno = ? AND idMateria = ? ";
     
-    public CursadaData(Conexion conexion) {
-        try {
-            this.conexion=conexion;
-            connection = conexion.getConexion();
-        } catch (SQLException ex) {
-            System.out.println("Error al abrir al obtener la conexion");
-        }
-    }
     
+       
     public void guardarCursada(Cursada cursada){
-        try {
-            PreparedStatement statement = connection.prepareStatement(SQL_INSERT, Statement.RETURN_GENERATED_KEYS);
-            statement.setInt(1, cursada.getAlumno().getId());
-            statement.setInt(2, cursada.getMateria().getId());
-            statement.setInt(3, cursada.getNota());
-   
-            statement.executeUpdate();
+        Connection conn = null;
+        PreparedStatement ps = null;
+        try{
+            conn = (this.userConn != null) ? this.userConn : Conexion.getConnection();
+            ps = conn.prepareStatement(SQL_INSERT);
+            ps.setInt(1, cursada.getAlumno().getId());
+            ps.setInt(2, cursada.getMateria().getId());
+            ps.setInt(3, cursada.getNota());
             
-            ResultSet rs = statement.getGeneratedKeys();
-            if (rs.next()) {
-                cursada.setId(rs.getInt(1));
-            } else {
-                System.out.println("No se pudo obtener el id luego de insertar un alumno");
+            ps.executeUpdate();
+            
+        }catch(SQLException e){
+            System.out.println("ERROR al guardar la cursada");
+            e.printStackTrace();
+        }finally{
+            Conexion.close(ps);
+            if(this.userConn == null){
+                Conexion.close(conn);
             }
-            statement.close();
-            
-        } catch (SQLException ex) {
-            System.out.println("Error al insertar un alumno: " + ex.getMessage());
         }
     }
     
     public List<Cursada> obtenerCursadas(){
-        List<Cursada> cursadas = new ArrayList<Cursada>();
-        try {
-            PreparedStatement statement = connection.prepareStatement(SQL_SELECT_ALL);
-            ResultSet resultSet = statement.executeQuery();
-            Cursada cursada;
-            while(resultSet.next()){
-                cursada = new Cursada();
-                cursada.setId(resultSet.getInt("id"));
+        List<Cursada> listaCursada = new ArrayList<>();
+        Connection conn = null;
+        PreparedStatement ps = null;
+        ResultSet rs = null;
+        Cursada c = null;
+        Alumno a = null;
+        Materia m = null;
+        try{
+            conn = (this.userConn != null) ? this.userConn : Conexion.getConnection();
+            ps = conn.prepareStatement(SQL_SELECT_ALL);
+            rs = ps.executeQuery();
+            
+            while(rs.next()){
+                c = new Cursada();
+                c.setId(rs.getInt(1));
                 
-                Alumno a=buscarAlumno(resultSet.getInt("idAlumno"));
-                cursada.setAlumno(a);
+                a = new Alumno();
+                a = buscarAlumno(rs.getInt(2));
+                c.setAlumno(a);
                 
-                Materia m=buscarMateria(resultSet.getInt("idMateria"));
-                cursada.setMateria(m);
-                cursada.setNota(resultSet.getInt("nota"));
-
-                cursadas.add(cursada);
-            }      
-            statement.close();
-        } catch (SQLException ex) {
-            System.out.println("Error al obtener los alumnos: " + ex.getMessage());
+                m = new Materia();
+                m = buscarMateria(rs.getInt(3));
+                c.setMateria(m);
+                
+                c.setNota(rs.getInt(4));
+                
+                listaCursada.add(c);
+            }
+            
+        }catch(SQLException e){
+            System.out.println("ERROR al obtener las cursadas");
+            e.printStackTrace();
+        }finally{
+            Conexion.close(rs);
+            Conexion.close(ps);
+            if(this.userConn == null){
+                Conexion.close(conn);
+            }
         }
-
-        return cursadas;
+        
+        return listaCursada;
     }
-    public List<Cursada> obtenerCursadasXAlumno(int id){
-        List<Cursada> cursadas = new ArrayList<Cursada>();
-        try {
-            PreparedStatement statement = connection.prepareStatement(SQL_SELECT);
-            statement.setInt(1,id);
-            ResultSet resultSet = statement.executeQuery();
-            Cursada cursada;
-            while(resultSet.next()){
-                cursada = new Cursada();
-                cursada.setId(resultSet.getInt("id"));
-                
-                Alumno a=buscarAlumno(resultSet.getInt("idAlumno"));
-                cursada.setAlumno(a);
-                
-                Materia m=buscarMateria(resultSet.getInt("idMateria"));
-                cursada.setMateria(m);
-                cursada.setNota(resultSet.getInt("nota"));
-
-                cursadas.add(cursada);
-            }      
-            statement.close();
-        } catch (SQLException ex) {
-            System.out.println("Error al obtener los alumnos: " + ex.getMessage());
-        }
-
-        return cursadas;
-    }
-
     
-    public Alumno buscarAlumno(int id){
-        AlumnoData ad=new AlumnoData(conexion);
-        return ad.buscarAlumno(id);
+    public List<Cursada> obtenerCursadasXAlumno(int id){
+        List<Cursada> listaCursada = new ArrayList<>();
+        Connection conn = null;
+        PreparedStatement ps = null;
+        ResultSet rs = null;
+        Cursada c = null;
+        Alumno a = null;
+        Materia m = null;
+        try{
+            conn = (this.userConn != null) ? this.userConn : Conexion.getConnection();
+            ps = conn.prepareStatement(SQL_SELECT);
+            ps.setInt(1, id);
+            rs = ps.executeQuery();
+            
+            while(rs.next()){
+                c = new Cursada();
+                c.setId(rs.getInt(1));
+                
+                a = new Alumno();
+                a = buscarAlumno(rs.getInt(2));
+                c.setAlumno(a);
+                
+                m = new Materia();
+                m = buscarMateria(rs.getInt(3));
+                c.setMateria(m);
+                
+                c.setNota(rs.getInt(4));
+                
+                listaCursada.add(c);
+            }
+            
+        }catch(SQLException e){
+            System.out.println("ERROR al obtener las cursadas");
+            e.printStackTrace();
+        }finally{
+            Conexion.close(rs);
+            Conexion.close(ps);
+            if(this.userConn == null){
+                Conexion.close(conn);
+            }
+        }
+        
+        return listaCursada;
     }
     
     public Materia buscarMateria(int id){
-        MateriaData md=new MateriaData(conexion);
-        return md.buscarMateria(id);
+        MateriaData m = new MateriaData();
+        return m.buscarMateria(id);
+    }
+    
+    public Alumno buscarAlumno(int id){
+        AlumnoData a = new AlumnoData();
+        return a.buscarAlumno(id);
     }
     
     public List<Materia> obtenerMateriasCursadas(int id){
-    List<Materia> materias = new ArrayList<Materia>();
-        try {
-            PreparedStatement statement = connection.prepareStatement(SQL_SELECT_MAT);
-            statement.setInt(1, id);
-            ResultSet resultSet = statement.executeQuery();
-            Materia materia;
-            while(resultSet.next()){
-                materia = new Materia();
-                materia.setId(resultSet.getInt("idMateria"));
-                materia.setNombre(resultSet.getString("nombre"));
-                materias.add(materia);
-            }      
-            statement.close();
-        } catch (SQLException ex) {
-            System.out.println("Error al obtener los alumnos: " + ex.getMessage());
+        List<Materia> listaMaterias = new ArrayList<>();
+        Materia m = null;
+        Connection conn = null;
+        PreparedStatement ps = null;
+        ResultSet rs = null;
+        try{
+            conn = (this.userConn != null) ? this.userConn : Conexion.getConnection();
+            ps = conn.prepareStatement(SQL_SELECT_MAT);
+            ps.setInt(1, id);
+            rs = ps.executeQuery();
+            while(rs.next()){
+                m = new Materia();
+                
+                m.setId(rs.getInt(1));
+                m.setNombre(rs.getString(2));
+                
+                listaMaterias.add(m);
+            }
+        }catch(SQLException e){
+            System.out.println("ERROR al obtener Materias cursadas");
+            e.printStackTrace();
+        }finally{
+            Conexion.close(rs);
+            Conexion.close(ps);
+            if(this.userConn == null){
+                Conexion.close(conn);
+            }
         }
-
-        return materias;
+        
+        return listaMaterias;
     }
     
     public List<Materia> obtenerMateriasNOCursadas(int id){
-    List<Materia> materias = new ArrayList<Materia>();
-        try {
-            PreparedStatement statement = connection.prepareStatement(SQL_SELECT_NOT_MAT);
-            statement.setInt(1, id);
-            ResultSet resultSet = statement.executeQuery();
-            Materia materia;
-            while(resultSet.next()){
-                materia = new Materia();
-                materia.setId(resultSet.getInt("id"));
-                materia.setNombre(resultSet.getString("nombre"));
-                materias.add(materia);
-            }      
-            statement.close();
-        } catch (SQLException ex) {
-            System.out.println("Error al obtener los alumnos: " + ex.getMessage());
+        List<Materia> listaMaterias = new ArrayList<>();
+        Materia m = null;
+        Connection conn = null;
+        PreparedStatement ps = null;
+        ResultSet rs = null;
+        try{
+            conn = (this.userConn != null) ? this.userConn : Conexion.getConnection();
+            ps = conn.prepareStatement(SQL_SELECT_NOT_MAT);
+            ps.setInt(1, id);
+            rs = ps.executeQuery();
+            while(rs.next()){
+                m = new Materia();
+                
+                m.setId(rs.getInt(1));
+                m.setNombre(rs.getString(2));
+                
+                listaMaterias.add(m);
+            }
+        }catch(SQLException e){
+            System.out.println("ERROR al obtener Materias cursadas");
+            e.printStackTrace();
+        }finally{
+            Conexion.close(rs);
+            Conexion.close(ps);
+            if(this.userConn == null){
+                Conexion.close(conn);
+            }
         }
-
-        return materias;
-      
+        
+        return listaMaterias;
     }
     
-    public void borrarCursadaDeUnaMateriaDeunAlumno(int idAlumno,int idMateria){
-        try {
-            PreparedStatement statement = connection.prepareStatement(SQL_DELETE_MAT, Statement.RETURN_GENERATED_KEYS);
-            statement.setInt(1, idAlumno);
-            statement.setInt(2, idMateria);
-
-            statement.executeUpdate();
+    public void borrarCursadaDeUnaMateriaDeUnAlumno(int idAlumno, int idMateria){
+        Connection conn = null;
+        PreparedStatement ps = null;
+        try{
+            conn = (this.userConn != null) ? this.userConn : Conexion.getConnection();
+            ps = conn.prepareStatement(SQL_DELETE_MAT);
+            ps.setInt(1, idMateria);
+            ps.setInt(2, idAlumno);
+            ps.executeUpdate();
             
-            statement.close();
-    
-        } catch (SQLException ex) {
-            System.out.println("Error al insertar un alumno: " + ex.getMessage());
+        }catch(SQLException e){
+            System.out.println("ERROR al borrar la cursada del Alumno");
+            e.printStackTrace();
+        }finally{
+            Conexion.close(ps);
+            if(this.userConn == null){
+                Conexion.close(conn);
+            }
         }
     }
     
-    public void actualizarNotaCursada(int idAlumno,int idMateria, int nota){  
-        try {
-            PreparedStatement statement = connection.prepareStatement(SQL_UPDATE_NOTA, Statement.RETURN_GENERATED_KEYS);
-            statement.setInt(1,nota);
-            statement.setInt(2, idAlumno);
-            statement.setInt(3, idMateria);
- 
-            statement.executeUpdate();         
-            
-            statement.close();
-        } catch (SQLException ex) {
-            System.out.println("Error al insertar un alumno: " + ex.getMessage());
+    public void actualizarNotaCursada(int idAlumno, int idMateria, int nota){
+        Connection conn = null;
+        PreparedStatement ps = null;
+        try{
+            conn = (this.userConn != null) ? this.userConn : Conexion.getConnection();
+            ps = conn.prepareStatement(SQL_UPDATE_NOTA);
+            ps.setInt(1, nota);
+            ps.setInt(2, idAlumno);
+            ps.setInt(3, idMateria);
+            ps.executeUpdate();
+        }catch(SQLException e){
+            System.out.println("ERROR al actualizar nota");
+            e.printStackTrace();
         }
+        
     }
+    
+    
+    
 }
